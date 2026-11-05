@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Suivi des coûts - routeur-ia</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='suivi.css') }}">
+  {% if mode_faux %}<script src="{{ url_for('static', filename='essai.js') }}" defer></script>{% endif %}
+</head>
+<body>
+<main>
+  <header class="entete">
+    <div>
+      <h1>Suivi des coûts</h1>
+      <p class="secondaire">Appels routés entre Claude et Gemini, par modèle et par jour (UTC).</p>
+    </div>
+    <nav aria-label="Période" class="periodes">
+      {% for p in periodes %}
+      <a href="?jours={{ p }}" {% if p == jours %}aria-current="true"{% endif %}>{{ p }} jours</a>
+      {% endfor %}
+    </nav>
+  </header>
+
+  {% if mode_faux %}
+  <p class="bandeau" data-testid="bandeau-demo">
+    Mode démonstration : faux fournisseur, aucun vrai modèle appelé. Les jetons sont simulés et
+    les coûts sont calculés à partir d'eux, avec les prix du fichier de configuration.
+  </p>
+  {% endif %}
+
+  <section class="tuiles" aria-label="Chiffres clés">
+    <div class="tuile">
+      <h2>Dépensé ce mois</h2>
+      <p class="valeur" data-testid="budget-depense">{{ budget.depense_nano | usd }}</p>
+      <div class="jauge" role="img" aria-label="{{ pourcentage_depense }} % du plafond utilisé">
+        <progress max="100" value="{{ pourcentage_depense }}"></progress>
+      </div>
+      <p class="secondaire">{{ pourcentage_depense }} % d'un plafond de {{ budget.plafond_nano | usd }}</p>
+    </div>
+    <div class="tuile">
+      <h2>Coût sur {{ jours }} jours</h2>
+      <p class="valeur" data-testid="cout-periode">{{ cout_periode | usd }}</p>
+    </div>
+    <div class="tuile">
+      <h2>Appels</h2>
+      <p class="valeur" data-testid="appels-periode">{{ appels_periode | entier }}</p>
+      <p class="secondaire">dont {{ echecs_periode }} en échec</p>
+    </div>
+    <div class="tuile">
+      <h2>Fournisseurs</h2>
+      <ul class="fournisseurs">
+        {% for f in fournisseurs %}
+        <li data-testid="fournisseur-{{ f.nom }}">
+          <span>{{ f.nom }}</span>
+          <span class="etat {{ 'bon' if f.disponible else 'mauvais' }}">{{ 'disponible' if f.disponible else 'en panne' }}</span>
+          {% if mode_faux %}
+          <button type="button" class="bouton-panne" data-fournisseur="{{ f.nom }}" data-active="{{ 'false' if f.simule_panne else 'true' }}">
+            {{ 'Rétablir' if f.simule_panne else 'Simuler une panne' }}
+          </button>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </section>
+
+  {% if mode_faux %}
+  <section class="carte">
+    <h2>Envoyer une demande d'essai</h2>
+    <form id="essai" class="essai">
+      <label>Type de tâche
+        <select name="tache" data-testid="essai-tache">
+          {% for t in taches %}<option {% if t == 'general' %}selected{% endif %}>{{ t }}</option>{% endfor %}
+        </select>
+      </label>
+      <label class="large">Message
+        <input name="message" required maxlength="4000" data-testid="essai-message" value="Résume ce texte en une phrase.">
+      </label>
+      <button type="submit" data-testid="essai-envoyer">Envoyer</button>
+    </form>
+    <p id="essai-resultat" class="secondaire" role="status" data-testid="essai-resultat"></p>
+  </section>
+  {% endif %}
+
+  <section class="carte">
+    <h2>Coût par jour et par modèle</h2>
+    {% if lignes %}
+    <ul class="legende" aria-label="Légende">
+      {% for modele, serie in legende %}
+      <li><span class="pastille serie-{{ serie }}"></span>{{ modele }}</li>
+      {% endfor %}
+    </ul>
+    <div class="defilant">
+    <svg viewBox="0 0 {{ graphique.largeur }} {{ graphique.hauteur }}" role="img" data-testid="graphique"
+         aria-label="Coût par jour, empilé par modèle. Le détail est dans le tableau plus bas.">
+      {% for g in graphique.graduations %}
+      <line class="grille" x1="{{ graphique.x_debut }}" x2="{{ graphique.x_fin }}" y1="{{ g.y }}" y2="{{ g.y }}"></line>
+      <text class="axe" x="{{ graphique.x_debut - 8 }}" y="{{ g.y + 4 }}" text-anchor="end">{{ g.texte }}</text>
+      {% endfor %}
+      {% for c in graphique.colonnes %}
+      {% for s in c.segments %}
+      <path class="serie-{{ s.serie }}" d="{{ s.chemin }}" data-modele="{{ s.modele }}"><title>{{ s.titre }}</title></path>
+      {% endfor %}
+      {% if c.etiquette %}
+      <text class="axe" x="{{ c.x_etiquette }}" y="{{ graphique.hauteur - 6 }}" text-anchor="middle">{{ c.etiquette }}</text>
+      {% endif %}
+      {% endfor %}
+    </svg>
+    </div>
+    {% else %}
+    <p class="vide" data-testid="vide">Aucun appel sur cette période.</p>
+    {% endif %}
+  </section>
+
+  {% if totaux %}
+  <section class="carte">
+    <h2>Par modèle</h2>
+    <div class="defilant">
+      <table data-testid="table-modeles">
+        <thead><tr><th>Modèle</th><th class="n">Appels</th><th class="n">Échecs</th><th class="n">Jetons entrée</th><th class="n">Jetons sortie</th><th class="n">Coût</th></tr></thead>
+        <tbody>
+          {% for t in totaux %}
+          <tr>
+            <td><span class="pastille serie-{{ t.serie }}"></span>{{ t.modele }}</td>
+            <td class="n">{{ t.appels | entier }}</td><td class="n">{{ t.echecs | entier }}</td>
+            <td class="n">{{ t.jetons_entree | entier }}</td><td class="n">{{ t.jetons_sortie | entier }}</td>
+            <td class="n">{{ t.cout_nano | usd }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section class="carte">
+    <details>
+      <summary>Détail par jour et par modèle</summary>
+      <div class="defilant">
+        <table data-testid="table-jours">
+          <thead><tr><th>Jour</th><th>Modèle</th><th class="n">Appels</th><th class="n">Échecs</th><th class="n">Coût</th></tr></thead>
+          <tbody>
+            {% for l in lignes %}
+            <tr><td>{{ l.jour.isoformat() }}</td><td>{{ l.modele }}</td><td class="n">{{ l.appels }}</td><td class="n">{{ l.echecs }}</td><td class="n">{{ l.cout_nano | usd }}</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+  {% endif %}
+
+  {% if derniers %}
+  <section class="carte">
+    <h2>Derniers appels</h2>
+    <div class="defilant">
+      <table data-testid="table-derniers">
+        <thead><tr><th>Heure (UTC)</th><th>Tâche</th><th>Niveau</th><th>Modèle</th><th class="n">Essai</th><th>Résultat</th><th class="n">Coût</th></tr></thead>
+        <tbody>
+          {% for a in derniers %}
+          <tr>
+            <td>{{ a.horodatage.strftime('%d/%m %H:%M:%S') }}</td>
+            <td>{{ a.tache }}</td><td>{{ a.niveau }}</td>
+            <td>{{ a.modele }}{% if a.bascule %} <span class="etiquette" data-testid="bascule">bascule</span>{% endif %}</td>
+            <td class="n">{{ a.essai }}</td>
+            <td><span class="etat {{ 'bon' if a.statut == 'ok' else 'mauvais' }}">{{ a.statut }}</span>{% if a.code_erreur %} <code>{{ a.code_erreur }}</code>{% endif %}</td>
+            <td class="n">{{ a.cout_nano | usd }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+  {% endif %}
+</main>
+</body>
+</html>
