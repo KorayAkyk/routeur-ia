@@ -1,0 +1,97 @@
+# Configuration du routeur : modèles, prix, règles de routage, budget, reprises.
+#
+# Les prix sont indicatifs et À VÉRIFIER avant tout usage réel. Ils ont été relevés le 2026-11-05
+# sur les pages de tarifs publiques d'Anthropic et de Google, en dollars par million de jetons,
+# puis recopiés à la main. Ils ne sont pas mis à jour automatiquement.
+# Écrits en chaînes pour rester des décimaux exacts, sans passer par un flottant.
+
+[budget]
+plafond_mensuel_usd = "5.00"
+seuil_economie = 0.30 # sous 30 % de budget restant : un niveau de modèle en dessous
+seuil_critique = 0.10 # sous 10 % : niveau le moins cher uniquement
+
+[tentatives]
+max_essais = 3
+attente_initiale_s = 0.5
+facteur = 2.0
+attente_max_s = 8.0
+gigue = 0.2 # part de l'attente tirée au hasard, pour éviter les relances simultanées
+delai_appel_s = 120.0
+
+[pannes]
+echecs_avant_panne = 3 # appels consécutifs perdus avant d'écarter un fournisseur
+duree_panne_s = 120.0
+
+[routage]
+seuil_court = 200 # jetons estimés : en dessous, une demande générale va au niveau le moins cher
+seuil_long = 8000 # au-dessus, jamais le niveau le moins cher
+seuil_tres_long = 50000 # au-dessus, le candidat au coût d'entrée le plus bas passe en premier
+
+[routage.niveau_par_tache]
+classification = "eco"
+extraction = "eco"
+general = "standard"
+resume = "standard"
+traduction = "standard"
+redaction = "standard"
+agent = "standard"
+code = "expert"
+raisonnement = "expert"
+
+# Du moins cher au plus cher. L'ordre des modèles donne l'ordre de bascule.
+[[niveaux]]
+nom = "eco"
+modeles = ["claude-haiku-5-5", "gemini-3.1-flash-lite"]
+effort = "low"
+
+[[niveaux]]
+nom = "standard"
+modeles = ["claude-sonnet-5-5", "gemini-3.8-flash"]
+effort = "medium"
+
+[[niveaux]]
+nom = "expert"
+modeles = ["claude-opus-5-5", "gemini-4-argon"]
+effort = "high"
+
+[[modeles]]
+id = "claude-opus-5-5"
+fournisseur = "anthropic"
+prix_entree = "4.00"
+prix_sortie = "20.00"
+
+[[modeles]]
+id = "claude-sonnet-5-5"
+fournisseur = "anthropic"
+prix_entree = "2.00"
+prix_sortie = "10.00"
+
+[[modeles]]
+id = "claude-haiku-5-5"
+fournisseur = "anthropic"
+prix_entree = "0.10"
+prix_sortie = "0.50"
+# Tarif publié plus élevé pour les demandes au-delà de 100 000 jetons d'entrée.
+palier_jetons = 100000
+prix_entree_palier = "0.50"
+prix_sortie_palier = "2.50"
+
+# Google annonce une hausse de ce prix : 4.00 / 20.00 à partir du 2026-12-01.
+[[modeles]]
+id = "gemini-4-argon"
+fournisseur = "google"
+prix_entree = "2.00"
+prix_sortie = "10.00"
+
+# Google annonce une hausse de ce prix : 1.50 / 7.50 à partir du 2027-01-01.
+[[modeles]]
+id = "gemini-3.8-flash"
+fournisseur = "google"
+prix_entree = "0.75"
+prix_sortie = "3.75"
+
+[[modeles]]
+id = "gemini-3.1-flash-lite"
+fournisseur = "google"
+prix_entree = "0.25"
+prix_sortie = "1.50"
