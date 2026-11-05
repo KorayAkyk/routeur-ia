@@ -37,7 +37,7 @@ test: $(VENV)/.installe
 	$(BIN)/pytest -m "not navigateur" --cov --cov-report=term-missing --cov-fail-under=90
 
 e2e: navigateur
-	$(BIN)/pytest -m navigateur
+	$(BIN)/pytest -m navigateur $(OPTIONS_E2E)
 
 verifier: lint types test e2e
 
